@@ -231,16 +231,37 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 					return
 				}
 			}
+			// MCP spec shape only
 			var params struct {
-				ToolID string                 `json:"toolId"`
-				Args   map[string]interface{} `json:"args"`
+				Name      string                 `json:"name"`
+				Arguments map[string]interface{} `json:"arguments"`
 			}
 			if err := json.Unmarshal(rpcReq.Params, &params); err != nil {
 				writeRPCError(w, rpcReq.ID, -32602, "invalid params", nil)
 				return
 			}
-			tool, ok := s.GetTool(serverSlug, params.ToolID)
-			if !ok {
+			if params.Name == "" {
+				writeRPCError(w, rpcReq.ID, -32602, "invalid params: missing tool name", nil)
+				return
+			}
+			// Resolve tool strictly by name per MCP spec
+			toolsForServer, err := s.ListToolsByServer(serverSlug)
+			if err != nil {
+				writeRPCError(w, rpcReq.ID, -32004, "server not found", nil)
+				return
+			}
+			var (
+				tool  store.Tool
+				found bool
+			)
+			for _, t := range toolsForServer {
+				if t.Name == params.Name {
+					tool = t
+					found = true
+					break
+				}
+			}
+			if !found {
 				writeRPCError(w, rpcReq.ID, -32001, "tool not found", nil)
 				return
 			}
@@ -259,7 +280,7 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 			srv, _ := s.GetServer(serverSlug)
 			tenant, _ := s.GetTenant(srv.TenantSlug)
 			client := &http.Client{Timeout: 20 * time.Second}
-			res, err := engine.Execute(r.Context(), client, srv, tenant, tool, params.Args)
+			res, err := engine.Execute(r.Context(), client, srv, tenant, tool, params.Arguments)
 			if err != nil {
 				writeRPCError(w, rpcReq.ID, -32000, err.Error(), nil)
 				return
