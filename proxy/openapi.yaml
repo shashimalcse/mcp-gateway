@@ -1,0 +1,253 @@
+openapi: 3.0.3
+info:
+  title: MCP Proxy API (MVP)
+  version: 0.1.0
+  description: |
+    HTTP API for MCP Proxy MVP. Implements MCP Streamable HTTP transport with a single
+    JSON-RPC 2.0 POST endpoint. Methods include initialize, tools/list, and tools/call.
+    Authentication is JWT Bearer unless UNPROTECTED=1.
+servers:
+  - url: http://localhost:8080
+paths:
+  /proxy/{server}/.well-known/oauth-protected-resource:
+    get:
+      summary: Protected Resource Metadata (RFC9728)
+      parameters:
+        - in: path
+          name: server
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectedResourceMetadata'
+  /proxy/{server}/mcp:
+    post:
+      summary: MCP endpoint (JSON-RPC 2.0 over HTTP POST)
+      description: |
+        Submit a JSON-RPC 2.0 request. Methods supported in MVP are `initialize`, `tools/list` and `tools/call`.
+        The server uses HTTP headers per MCP:
+        - `MCP-Protocol-Version`: latest is `2025-06-18`.
+        - `Mcp-Session-Id`: required for all methods after `initialize`.
+      parameters:
+        - in: path
+          name: server
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: MCP-Protocol-Version
+          required: false
+          schema:
+            type: string
+            example: '2025-06-18'
+          description: MCP protocol version. Recommended to send latest.
+        - in: header
+          name: Mcp-Session-Id
+          required: false
+          schema:
+            type: string
+          description: Required for `tools/list` and `tools/call`. Returned by `initialize` as a response header.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JSONRPCRequest'
+            examples:
+              initialize:
+                summary: initialize
+                value:
+                  jsonrpc: '2.0'
+                  id: 0
+                  method: initialize
+                  params:
+                    protocolVersion: '2025-06-18'
+                    capabilities:
+                      sampling: {}
+                      roots:
+                        listChanged: true
+                    clientInfo:
+                      name: mcp-inspector
+                      version: '0.15.0'
+              toolsList:
+                summary: tools/list
+                value:
+                  jsonrpc: '2.0'
+                  id: 1
+                  method: tools/list
+                  params:
+                    cursor: optional-cursor-value
+              toolsCall:
+                summary: tools/call
+                value:
+                  jsonrpc: '2.0'
+                  id: 2
+                  method: tools/call
+                  params:
+                    name: get_weather
+                    arguments:
+                      location: New York
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONRPCResponse'
+              examples:
+                initialize:
+                  summary: initialize result
+                  value:
+                    jsonrpc: '2.0'
+                    id: 0
+                    result:
+                      protocolVersion: '2025-06-18'
+                      capabilities:
+                        prompts: {}
+                        resources:
+                          subscribe: true
+                        tools: {}
+                        logging: {}
+                        completions: {}
+                        elicitation: {}
+                      serverInfo:
+                        name: example-servers/everything
+                        title: Everything Example Server
+                        version: 1.0.0
+                      instructions: |
+                        Server-specific instructions text
+                toolsList:
+                  summary: tools/list result
+                  value:
+                    jsonrpc: '2.0'
+                    id: 1
+                    result:
+                      tools:
+                        - name: getOrder
+                          title: Get Order
+                          description: Retrieve order by id
+                          inputSchema:
+                            type: object
+                            properties:
+                              orderId:
+                                type: string
+                                description: Order ID
+                            required: [orderId]
+                toolsCall:
+                  summary: tools/call result (text content)
+                  value:
+                    jsonrpc: '2.0'
+                    id: 2
+                    result:
+                      content:
+                        - type: text
+                          text: "Upstream response body or structured JSON string"
+                      isError: false
+          headers:
+            Mcp-Session-Id:
+              description: Returned on successful `initialize`. Include in subsequent requests.
+              schema:
+                type: string
+    delete:
+      summary: Terminate MCP session
+      parameters:
+        - in: path
+          name: server
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Mcp-Session-Id
+          required: true
+          schema:
+            type: string
+          description: Session to terminate for this server.
+      responses:
+        '204':
+          description: Session terminated
+components:
+  schemas:
+    JSONRPCRequest:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          example: '2.0'
+        id:
+          oneOf:
+            - type: string
+            - type: number
+        method:
+          type: string
+          example: tools/list
+        params:
+          description: Arbitrary params per method. For tools/call, include toolId and args.
+          type: object
+    JSONRPCResponse:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          example: '2.0'
+        id:
+          oneOf:
+            - type: string
+            - type: number
+        result:
+          nullable: true
+        error:
+          nullable: true
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              nullable: true
+    ProtectedResourceMetadata:
+      type: object
+      properties:
+        resource:
+          type: string
+        authorization_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorizationServerRef'
+        token_formats_supported:
+          type: array
+          items:
+            type: string
+        scopes_supported:
+          type: array
+          items:
+            type: string
+    AuthorizationServerRef:
+      type: object
+      properties:
+        issuer:
+          type: string
+        metadata_url:
+          type: string
+    MCPTool:
+      type: object
+      properties:
+        name:
+          type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+        inputSchema:
+          type: object
+          additionalProperties: true
+        outputSchema:
+          type: object
+          additionalProperties: true
+
