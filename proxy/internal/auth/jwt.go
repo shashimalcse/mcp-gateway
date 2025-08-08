@@ -15,12 +15,12 @@ import (
 )
 
 type JWTValidator struct {
-	store *store.MemoryStore
+	store store.Store
 	// MVP: simple per-issuer JWKS cache
 	cache map[string]*keyfunc.JWKS
 }
 
-func NewJWTValidator(s *store.MemoryStore) *JWTValidator {
+func NewJWTValidator(s store.Store) *JWTValidator {
 	return &JWTValidator{store: s, cache: make(map[string]*keyfunc.JWKS)}
 }
 

@@ -21,7 +21,10 @@ type ProtectedResourceMetadata struct {
 	ScopesSupported       []string                       `json:"scopes_supported,omitempty"`
 }
 
-func ProtectedResourceMetadataHandler(s *store.MemoryStore) http.HandlerFunc {
+func ProtectedResourceMetadataHandler(s interface {
+	GetServer(string) (store.Server, error)
+	GetTenant(string) (store.Tenant, error)
+}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		serverSlug := chi.URLParam(r, "server")
 		srv, err := s.GetServer(serverSlug)
@@ -47,7 +50,9 @@ func ProtectedResourceMetadataHandler(s *store.MemoryStore) http.HandlerFunc {
 	}
 }
 
-func ListToolsHandler(s *store.MemoryStore) http.HandlerFunc {
+func ListToolsHandler(s interface {
+	ListToolsByServer(string) ([]store.Tool, error)
+}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		serverSlug := chi.URLParam(r, "server")
 		tools, err := s.ListToolsByServer(serverSlug)
@@ -84,7 +89,11 @@ type jsonRPCError struct {
 }
 
 // MCPEndpointHandler implements the single POST endpoint for Streamable HTTP (JSON only for MVP)
-func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerFunc {
+func MCPEndpointHandler(s interface {
+	GetServer(string) (store.Server, error)
+	GetTenant(string) (store.Tenant, error)
+	ListToolsByServer(string) ([]store.Tool, error)
+}, sm *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Origin validation (if configured and not unprotected)
 		if !config.Unprotected && len(config.AllowedOrigins) > 0 {
@@ -168,9 +177,10 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 			result := map[string]interface{}{
 				"protocolVersion": config.MCPProtocolVersionLatest,
 				"capabilities": map[string]interface{}{
-					"prompts":     map[string]interface{}{},
-					"resources":   map[string]interface{}{"subscribe": true},
-					"tools":       map[string]interface{}{},
+					"prompts":   map[string]interface{}{},
+					"resources": map[string]interface{}{"subscribe": true},
+					// Per spec, declare tools capability and whether listChanged notifications are emitted
+					"tools":       map[string]interface{}{"listChanged": false},
 					"logging":     map[string]interface{}{},
 					"completions": map[string]interface{}{},
 					"elicitation": map[string]interface{}{},
@@ -185,12 +195,19 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 			writeRPCResult(w, rpcReq.ID, result)
 			return
 		case "tools/list":
+			// Params: optional pagination cursor per spec
+			if len(rpcReq.Params) > 0 {
+				var listParams struct {
+					Cursor string `json:"cursor,omitempty"`
+				}
+				_ = json.Unmarshal(rpcReq.Params, &listParams) // tolerate unknown params
+			}
 			if sid := r.Header.Get("Mcp-Session-Id"); sid == "" {
 				writeRPCError(w, rpcReq.ID, -32005, "missing session", nil)
 				return
 			} else {
 				if _, err := sm.Get(sid); err != nil {
-					http.Error(w, "session not found", http.StatusNotFound)
+					writeRPCError(w, rpcReq.ID, -32005, "session not found", nil)
 					return
 				}
 			}
@@ -212,13 +229,15 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 					tool["title"] = t.Title
 				}
 				if t.OutputSchema != nil {
-					tool["outputSchema"] = t.OutputSchema
+					// Only include outputSchema if it is a valid JSON Schema object with type=="object"
+					if typ, ok := t.OutputSchema["type"].(string); ok && typ == "object" {
+						tool["outputSchema"] = t.OutputSchema
+					}
 				}
 				out = append(out, tool)
 			}
-			result := map[string]interface{}{
-				"tools": out,
-			}
+			// For MVP, return full list without pagination; omit nextCursor
+			result := map[string]interface{}{"tools": out}
 			writeRPCResult(w, rpcReq.ID, result)
 			return
 		case "tools/call":
@@ -227,7 +246,7 @@ func MCPEndpointHandler(s *store.MemoryStore, sm *session.Manager) http.HandlerF
 				return
 			} else {
 				if _, err := sm.Get(sid); err != nil {
-					http.Error(w, "session not found", http.StatusNotFound)
+					writeRPCError(w, rpcReq.ID, -32005, "session not found", nil)
 					return
 				}
 			}

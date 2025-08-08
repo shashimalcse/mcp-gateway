@@ -1,0 +1,57 @@
+openapi: 3.0.3
+info:
+  title: Mock Orders/Products API
+  version: 0.1.0
+servers:
+  - url: http://localhost:9090
+paths:
+  /api/orders/{orderId}:
+    get:
+      summary: Get order by id
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+  /api/products/{productId}:
+    get:
+      summary: Get product by id
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: integer
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+
