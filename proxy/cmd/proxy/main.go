@@ -67,7 +67,7 @@ func seedDemo(s *store.MemoryStore) {
 		Slug:             "tenant-a",
 		Name:             "Tenant A",
 		AllowedIssuers:   []string{"https://issuer.example.com"},
-		EgressAllowlist:  []string{"httpbin.org"},
+		EgressAllowlist:  []string{"httpbin.org", "localhost", "127.0.0.1"},
 		Enabled:          true,
 		CreatedUnixMilli: time.Now().UnixMilli(),
 	})
@@ -81,7 +81,7 @@ func seedDemo(s *store.MemoryStore) {
 		Audience:        audience,
 		AllowedIssuers:  nil, // use tenant-level issuers
 		Enabled:         true,
-		UpstreamBaseURL: "https://httpbin.org",
+		UpstreamBaseURL: "http://localhost:9090",
 		ServerTitle:     "Sales MCP Server",
 		ServerVersion:   "0.1.0",
 		Instructions:    "Use tools to interact with Sales API.",
@@ -93,16 +93,16 @@ func seedDemo(s *store.MemoryStore) {
 		Audience:        audience,
 		AllowedIssuers:  nil,
 		Enabled:         true,
-		UpstreamBaseURL: "https://httpbin.org",
+		UpstreamBaseURL: "http://localhost:9090",
 		ServerTitle:     "Products MCP Server",
 		ServerVersion:   "0.1.0",
 		Instructions:    "Use tools to interact with Products API.",
 	})
 
 	_ = s.UpsertToolsForServer("sales", []store.Tool{
-		{ID: "getOrder", Name: "getOrder", Title: "Get Order", Description: "Retrieve order by id", RequiredScopes: []string{"read:orders"}, Mapping: store.RequestTemplate{Method: "GET", Path: "/anything/orders/{{orderId}}", Headers: map[string]string{"Accept": "application/json"}}, InputSchema: map[string]interface{}{"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": map[string]interface{}{"orderId": map[string]interface{}{"type": "string", "description": "Order ID"}}, "required": []string{"orderId"}, "additionalProperties": false}},
+		{ID: "getOrder", Name: "getOrder", Title: "Get Order", Description: "Retrieve order by id", RequiredScopes: []string{"read:orders"}, Mapping: store.RequestTemplate{Method: "GET", Path: "/api/orders/{{orderId}}", Headers: map[string]string{"Accept": "application/json"}}, InputSchema: map[string]interface{}{"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": map[string]interface{}{"orderId": map[string]interface{}{"type": "string", "description": "Order ID"}}, "required": []string{"orderId"}, "additionalProperties": false}},
 	})
 	_ = s.UpsertToolsForServer("products", []store.Tool{
-		{ID: "getProduct", Name: "getProduct", Title: "Get Product", Description: "Retrieve product by id", RequiredScopes: []string{"read:products"}, Mapping: store.RequestTemplate{Method: "GET", Path: "/anything/products/{{productId}}", Headers: map[string]string{"Accept": "application/json"}}, InputSchema: map[string]interface{}{"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": map[string]interface{}{"productId": map[string]interface{}{"type": "string", "description": "Product ID"}}, "required": []string{"productId"}, "additionalProperties": false}},
+		{ID: "getProduct", Name: "getProduct", Title: "Get Product", Description: "Retrieve product by id", RequiredScopes: []string{"read:products"}, Mapping: store.RequestTemplate{Method: "GET", Path: "/api/products/{{productId}}", Headers: map[string]string{"Accept": "application/json"}}, InputSchema: map[string]interface{}{"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": map[string]interface{}{"productId": map[string]interface{}{"type": "string", "description": "Product ID"}}, "required": []string{"productId"}, "additionalProperties": false}},
 	})
 }
